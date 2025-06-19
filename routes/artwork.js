@@ -8,7 +8,11 @@ artworkRouter.get("/", async (req, res) => {
   if (artwork_id == undefined)
     return res.status(500).json({ error: "an id is required!" });
   try {
-    fetch(CHICAGO_API + `/artworks/${artwork_id}`, { method: "GET" })
+    fetch(
+      CHICAGO_API +
+        `/artworks/${artwork_id}?fields=title,artist_title,date_display,dimensions,description,main_reference_number,medium_display,department_title,artwork_type_title,credit_line,image_id,color,place_of_origin`,
+      { method: "GET" }
+    )
       .then((data) => data.json())
       .then(async (data) => {
         return res.status(200).json(data);

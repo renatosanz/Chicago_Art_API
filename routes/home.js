@@ -57,39 +57,52 @@ homeRouter.get("/daily", async (req, res) => {
     let attempts = 0;
     while (attempts < 5) {
       const randomId = Math.floor(MAX_ARTWORKS * Math.random());
-      const response = await fetch(`${CHICAGO_API}/artworks/${randomId}`);
+      const response = await fetch(
+        `${CHICAGO_API}/artworks/${randomId}?fields=title,artist_title,date_display,dimensions,description,main_reference_number,medium_display,department_title,artwork_type_title,credit_line,image_id,color,place_of_origin`
+      );
 
       if (response?.status != 404) {
         const randomArtwork = await response.json();
         // from wikipedia
-        return fetch(
-          `https://es.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=extracts|pageimages&exintro=true&explaintext=true&titles=${randomArtwork.data.artist_title}&pithumbsize=300`
-        )
-          .then((artist_data) => artist_data.json())
-          .then(async (wiki_data) => {
-            const page = Object.values(wiki_data.query.pages)[0];
-            let final_data;
-            if (page.missing === "") {
-              final_data = {
-                data: randomArtwork.data,
-                artist_data: null,
-              };
-            }
-            final_data = {
-              data: randomArtwork.data,
-              artist_data: {
-                title: page.title,
-                extract: page.extract,
-                image: page.thumbnail ? page.thumbnail.source : null,
-              },
-            };
-            await redisClient.setEx(
-              cacheKey,
-              86400,
-              JSON.stringify(final_data)
-            );
-            return res.json(final_data);
-          });
+        if (randomArtwork.data.artist_title) {
+          return fetch(
+            `https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=extracts|pageimages&exintro=true&explaintext=true&titles=${encodeURIComponent(
+              randomArtwork.data.artist_title
+            )}&pithumbsize=300`
+          )
+            .then((artist_data) => artist_data.json())
+            .then(async (wiki_data) => {
+              const page = Object.values(wiki_data.query.pages)[0];
+              let final_data;
+              if (
+                page.missing === "" ||
+                page.extract.length == 0 ||
+                page.thumbnail === null
+              ) {
+                final_data = {
+                  data: randomArtwork.data,
+                  artist_data: null,
+                };
+              } else {
+                final_data = {
+                  data: randomArtwork.data,
+                  artist_data: {
+                    title: page.title,
+                    extract: page.extract,
+                    image: page.thumbnail ? page.thumbnail.source : null,
+                  },
+                };
+              }
+              await redisClient.setEx(
+                cacheKey,
+                86400,
+                JSON.stringify(final_data)
+              );
+              return res.json(final_data);
+            });
+        }
+        await redisClient.setEx(cacheKey, 86400, JSON.stringify(randomArtwork));
+        return res.json(randomArtwork);
       }
       attempts++;
     }
