@@ -61,8 +61,35 @@ homeRouter.get("/daily", async (req, res) => {
 
       if (response?.status != 404) {
         const randomArtwork = await response.json();
-        await redisClient.setEx(cacheKey, 86400, JSON.stringify(randomArtwork));
-        return res.json(randomArtwork);
+        // from wikipedia
+        return fetch(
+          `https://es.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=extracts|pageimages&exintro=true&explaintext=true&titles=${randomArtwork.data.artist_title}&pithumbsize=300`
+        )
+          .then((artist_data) => artist_data.json())
+          .then(async (wiki_data) => {
+            const page = Object.values(wiki_data.query.pages)[0];
+            let final_data;
+            if (page.missing === "") {
+              final_data = {
+                data: randomArtwork.data,
+                artist_data: null,
+              };
+            }
+            final_data = {
+              data: randomArtwork.data,
+              artist_data: {
+                title: page.title,
+                extract: page.extract,
+                image: page.thumbnail ? page.thumbnail.source : null,
+              },
+            };
+            await redisClient.setEx(
+              cacheKey,
+              86400,
+              JSON.stringify(final_data)
+            );
+            return res.json(final_data);
+          });
       }
       attempts++;
     }
